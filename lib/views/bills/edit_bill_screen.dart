@@ -12,7 +12,7 @@ import 'package:al_marwa_water_app/views/bills/widgets/amount_field_widget.dart'
 import 'package:al_marwa_water_app/views/bills/widgets/quantity_rate.dart';
 import 'package:al_marwa_water_app/widgets/custom_elevated_button.dart';
 import 'package:al_marwa_water_app/widgets/custom_textform_field.dart';
-import 'package:dropdown_search/dropdown_search.dart';
+import 'package:dropdown_search/dropdownSearch.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -45,7 +45,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
   int? selectedCustomerId;
   ProductsTypeController? productsTypeController;
   CustomerData? selectedCustomer;
-  bool _isLoading = true;
+  bool _isDataInitialized = false;
   
   @override
   void initState() {
@@ -141,6 +141,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
     if (productMatch.id != null && productMatch.id! > 0) {
       setState(() {
         selectedProductId = productMatch.id;
+        selectedProduct = productMatch.name!;
         rateController.text = productMatch.price ?? '0';
       });
     }
@@ -152,7 +153,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
     _calculateAmount();
     
     setState(() {
-      _isLoading = false;
+      _isDataInitialized = true;
     });
   }
 
@@ -177,16 +178,6 @@ class _EditBillScreenState extends State<EditBillScreen> {
     final height = MediaQuery.of(context).size.height;
     final productsTypeController = Provider.of<ProductsTypeController>(context);
     final customerController = Provider.of<CustomerController>(context);
-    
-    if (_isLoading) {
-      return Scaffold(
-        appBar: AppBar(
-          backgroundColor: colorScheme(context).primary,
-          title: Text('Loading...', style: TextStyle(color: Colors.white)),
-        ),
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
     
     return Scaffold(
       appBar: AppBar(
@@ -218,7 +209,9 @@ class _EditBillScreenState extends State<EditBillScreen> {
         centerTitle: true,
         backgroundColor: colorScheme(context).primary,
       ),
-      body: SingleChildScrollView(
+      body: !_isDataInitialized 
+          ? Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
         physics: AlwaysScrollableScrollPhysics(),
         child: Container(
           height: height,
