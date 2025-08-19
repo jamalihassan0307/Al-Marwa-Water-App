@@ -85,41 +85,62 @@ class _EditBillScreenState extends State<EditBillScreen> {
       await productsTypeController!.fetchProductTypes();
     }
     
+    // Debug print to see what data we have
+    print("Bill customer: ${widget.bill.customer}");
+    print("Bill product: ${widget.bill.product}");
+    print("Available customers: ${customerController!.customers.length}");
+    print("Available products: ${productsTypeController!.ProductTypes.length}");
+    
     // Find and set the selected customer
     final customers = customerController!.customers;
-    final customerMatch = customers.firstWhere(
-      (c) => 
-          c.personName == selectedCustomerName ||
-          '${c.customerCode}. ${c.personName}' == selectedCustomerName ||
-          c.customerCode == selectedCustomerName,
-      orElse: () => CustomerData(
-        id: -1,
-        customerCode: '',
-        personName: 'N/A',
-        date: '',
-        customerType: '',
-        buildingName: '',
-        blockNo: '',
-        roomNo: '',
-        phone1: '',
-        phone2: '',
-        deliveryDays: '',
-        customerPayId: '',
-        bottleGiven: '',
-        price: '',
-        paidDeposit: '',
-        amount: '',
-        phone3: '',
-        phone4: '',
-        email: '',
-        tradeName: '',
-        trnNumber: '',
-        authPersonName: '',
-        salePersonId: 0,
-        createdAt: '',
-        updatedAt: '',
-      ),
-    );
+    CustomerData? customerMatch;
+    
+    // Try different matching strategies
+    for (var customer in customers) {
+      if (customer.personName == selectedCustomerName ||
+          '${customer.customerCode}. ${customer.personName}' == selectedCustomerName ||
+          customer.customerCode == selectedCustomerName ||
+          customer.personName.contains(selectedCustomerName!) ||
+          selectedCustomerName!.contains(customer.personName)) {
+        customerMatch = customer;
+        break;
+      }
+    }
+    
+    if (customerMatch == null) {
+      // If no match found, try a more flexible approach
+      customerMatch = customers.firstWhere(
+        (c) => c.personName.toLowerCase().contains(selectedCustomerName!.toLowerCase()) ||
+               selectedCustomerName!.toLowerCase().contains(c.personName.toLowerCase()),
+        orElse: () => CustomerData(
+          id: -1,
+          customerCode: '',
+          personName: 'N/A',
+          date: '',
+          customerType: '',
+          buildingName: '',
+          blockNo: '',
+          roomNo: '',
+          phone1: '',
+          phone2: '',
+          deliveryDays: '',
+          customerPayId: '',
+          bottleGiven: '',
+          price: '',
+          paidDeposit: '',
+          amount: '',
+          phone3: '',
+          phone4: '',
+          email: '',
+          tradeName: '',
+          trnNumber: '',
+          authPersonName: '',
+          salePersonId: 0,
+          createdAt: '',
+          updatedAt: '',
+        ),
+      );
+    }
 
     if (customerMatch.id != -1) {
       setState(() {
@@ -129,14 +150,30 @@ class _EditBillScreenState extends State<EditBillScreen> {
             ? ''
             : customerMatch.trnNumber;
       });
+      
+      print("Selected customer: ${selectedCustomer!.personName}, ID: ${selectedCustomer!.id}");
+    } else {
+      print("Customer not found: $selectedCustomerName");
     }
 
     // Find and set the selected product
     final products = productsTypeController!.ProductTypes;
-    final productMatch = products.firstWhere(
-      (p) => p.name == selectedProduct,
-      orElse: () => ProductsModel(id: 0, name: '', price: '0'),
-    );
+    ProductsModel? productMatch;
+    
+    for (var product in products) {
+      if (product.name == selectedProduct) {
+        productMatch = product;
+        break;
+      }
+    }
+    
+    if (productMatch == null) {
+      // If no exact match, try a more flexible approach
+      productMatch = products.firstWhere(
+        (p) => p.name != null && p.name!.toLowerCase().contains(selectedProduct.toLowerCase()),
+        orElse: () => ProductsModel(id: 0, name: '', price: '0'),
+      );
+    }
 
     if (productMatch.id != null && productMatch.id! > 0) {
       setState(() {
@@ -144,6 +181,18 @@ class _EditBillScreenState extends State<EditBillScreen> {
         selectedProduct = productMatch.name!;
         rateController.text = productMatch.price ?? '0';
       });
+      
+      print("Selected product: $selectedProduct, ID: $selectedProductId");
+    } else {
+      print("Product not found: $selectedProduct");
+      // Set default product if not found
+      if (products.isNotEmpty) {
+        setState(() {
+          selectedProductId = products.first.id;
+          selectedProduct = products.first.name!;
+          rateController.text = products.first.price ?? '0';
+        });
+      }
     }
 
     // Fetch VAT percentage
