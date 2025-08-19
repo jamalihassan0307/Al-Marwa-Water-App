@@ -35,7 +35,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
   final TextEditingController vatController = TextEditingController();
   final TextEditingController quantityController = TextEditingController();
   final TextEditingController rateController = TextEditingController(text: '0');
-  
+
   bool isVATChecked = true;
   double totalAmount = 0.0;
   int? selectedProductId;
@@ -46,11 +46,11 @@ class _EditBillScreenState extends State<EditBillScreen> {
   ProductsTypeController? productsTypeController;
   CustomerData? selectedCustomer;
   bool _isDataInitialized = false;
-  
+
   @override
   void initState() {
     super.initState();
-    
+
     // Initialize with bill data
     totalAmount = widget.bill.total;
     dateController.text = widget.bill.date;
@@ -65,7 +65,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
     // Add listeners
     quantityController.addListener(_calculateAmount);
     rateController.addListener(_calculateAmount);
-    
+
     // Initialize data after widgets are built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initializeData();
@@ -73,45 +73,87 @@ class _EditBillScreenState extends State<EditBillScreen> {
   }
 
   void _initializeData() async {
-    customerController = Provider.of<CustomerController>(context, listen: false);
-    productsTypeController = Provider.of<ProductsTypeController>(context, listen: false);
-    
+    customerController =
+        Provider.of<CustomerController>(context, listen: false);
+    productsTypeController =
+        Provider.of<ProductsTypeController>(context, listen: false);
+
     // Wait for data to load if needed
     if (customerController!.customers.isEmpty) {
-      await customerController!.fetchCustomers();
+      await customerController!.fetchCustomers(context);
     }
-    
+
     if (productsTypeController!.ProductTypes.isEmpty) {
       await productsTypeController!.fetchProductTypes();
     }
-    
+
     // Debug print to see what data we have
     print("Bill customer: ${widget.bill.customer}");
     print("Bill product: ${widget.bill.product}");
     print("Available customers: ${customerController!.customers.length}");
     print("Available products: ${productsTypeController!.ProductTypes.length}");
-    
-    // Find and set the selected customer
+
+    // Find and set the selected customer - FIRST TRY TO MATCH BY ID
     final customers = customerController!.customers;
     CustomerData? customerMatch;
-    
-    // Try different matching strategies
-    for (var customer in customers) {
-      if (customer.personName == selectedCustomerName ||
-          '${customer.customerCode}. ${customer.personName}' == selectedCustomerName ||
-          customer.customerCode == selectedCustomerName ||
-          customer.personName.contains(selectedCustomerName!) ||
-          selectedCustomerName!.contains(customer.personName)) {
-        customerMatch = customer;
-        break;
+
+    // Try to parse the customer field as an ID first
+    int? customerId = int.tryParse(widget.bill.customer);
+    if (customerId != null) {
+      // Try to find customer by ID
+      customerMatch = customers.firstWhere(
+        (c) => c.id == customerId,
+        orElse: () => CustomerData(
+          id: -1,
+          customerCode: '',
+          personName: 'N/A',
+          date: '',
+          customerType: '',
+          buildingName: '',
+          blockNo: '',
+          roomNo: '',
+          phone1: '',
+          phone2: '',
+          deliveryDays: '',
+          customerPayId: '',
+          bottleGiven: '',
+          price: '',
+          paidDeposit: '',
+          amount: '',
+          phone3: '',
+          phone4: '',
+          email: '',
+          tradeName: '',
+          trnNumber: '',
+          authPersonName: '',
+          salePersonId: 0,
+          createdAt: '',
+          updatedAt: '',
+        ),
+      );
+    }
+
+    // If not found by ID, try to match by name
+    if (customerMatch == null || customerMatch.id == -1) {
+      for (var customer in customers) {
+        if (customer.personName == selectedCustomerName ||
+            '${customer.customerCode}. ${customer.personName}' ==
+                selectedCustomerName ||
+            customer.customerCode == selectedCustomerName ||
+            (selectedCustomerName != null && customer.personName.contains(selectedCustomerName!)) ||
+            (selectedCustomerName != null && selectedCustomerName!.contains(customer.personName))) {
+          customerMatch = customer;
+          break;
+        }
       }
     }
-    
-    if (customerMatch == null) {
+
+    if (customerMatch == null || customerMatch.id == -1) {
       // If no match found, try a more flexible approach
       customerMatch = customers.firstWhere(
-        (c) => c.personName.toLowerCase().contains(selectedCustomerName!.toLowerCase()) ||
-               selectedCustomerName!.toLowerCase().contains(c.personName.toLowerCase()),
+        (c) => selectedCustomerName != null &&
+            (c.personName.toLowerCase().contains(selectedCustomerName!.toLowerCase()) ||
+                selectedCustomerName!.toLowerCase().contains(c.personName.toLowerCase())),
         orElse: () => CustomerData(
           id: -1,
           customerCode: '',
@@ -146,31 +188,60 @@ class _EditBillScreenState extends State<EditBillScreen> {
       setState(() {
         selectedCustomer = customerMatch;
         selectedCustomerId = customerMatch.id;
-        trnController.text = customerMatch.trnNumber == "N/A" || customerMatch.trnNumber.isEmpty
-            ? ''
-            : customerMatch.trnNumber;
+        selectedCustomerName = customerMatch.personName;
+        trnController.text =
+            customerMatch.trnNumber == "N/A" || customerMatch.trnNumber.isEmpty
+                ? ''
+                : customerMatch.trnNumber;
       });
-      
-      print("Selected customer: ${selectedCustomer!.personName}, ID: ${selectedCustomer!.id}");
+
+      print(
+          "Selected customer: ${selectedCustomer!.personName}, ID: ${selectedCustomer!.id}");
     } else {
       print("Customer not found: $selectedCustomerName");
-    }
-
-    // Find and set the selected product
-    final products = productsTypeController!.ProductTypes;
-    ProductsModel? productMatch;
-    
-    for (var product in products) {
-      if (product.name == selectedProduct) {
-        productMatch = product;
-        break;
+      // Set default customer if not found
+      if (customers.isNotEmpty) {
+        setState(() {
+          selectedCustomer = customers.first;
+          selectedCustomerId = customers.first.id;
+          selectedCustomerName = customers.first.personName;
+          trnController.text = customers.first.trnNumber == "N/A" || customers.first.trnNumber.isEmpty
+              ? ''
+              : customers.first.trnNumber;
+        });
       }
     }
-    
-    if (productMatch == null) {
+
+    // Find and set the selected product - FIRST TRY TO MATCH BY ID
+    final products = productsTypeController!.ProductTypes;
+    ProductsModel? productMatch;
+
+    // Try to parse the product field as an ID first
+    int? productId = int.tryParse(widget.bill.product);
+    if (productId != null) {
+      // Try to find product by ID
+      productMatch = products.firstWhere(
+        (p) => p.id == productId,
+        orElse: () => ProductsModel(id: 0, name: '', price: '0'),
+      );
+    }
+
+    // If not found by ID, try to match by name
+    if (productMatch == null || productMatch.id == 0) {
+      for (var product in products) {
+        if (product.name == selectedProduct) {
+          productMatch = product;
+          break;
+        }
+      }
+    }
+
+    if (productMatch == null || productMatch.id == 0) {
       // If no exact match, try a more flexible approach
       productMatch = products.firstWhere(
-        (p) => p.name != null && p.name!.toLowerCase().contains(selectedProduct.toLowerCase()),
+        (p) =>
+            p.name != null &&
+            p.name!.toLowerCase().contains(selectedProduct.toLowerCase()),
         orElse: () => ProductsModel(id: 0, name: '', price: '0'),
       );
     }
@@ -181,7 +252,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
         selectedProduct = productMatch.name!;
         rateController.text = productMatch.price ?? '0';
       });
-      
+
       print("Selected product: $selectedProduct, ID: $selectedProductId");
     } else {
       print("Product not found: $selectedProduct");
@@ -197,10 +268,10 @@ class _EditBillScreenState extends State<EditBillScreen> {
 
     // Fetch VAT percentage
     await Provider.of<VatProvider>(context, listen: false).fetchVatPercentage();
-    
+
     // Calculate initial amount
     _calculateAmount();
-    
+
     setState(() {
       _isDataInitialized = true;
     });
@@ -227,7 +298,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
     final height = MediaQuery.of(context).size.height;
     final productsTypeController = Provider.of<ProductsTypeController>(context);
     final customerController = Provider.of<CustomerController>(context);
-    
+
     return Scaffold(
       appBar: AppBar(
         actions: [
@@ -258,144 +329,146 @@ class _EditBillScreenState extends State<EditBillScreen> {
         centerTitle: true,
         backgroundColor: colorScheme(context).primary,
       ),
-      body: !_isDataInitialized 
+      body: !_isDataInitialized
           ? Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-        physics: AlwaysScrollableScrollPhysics(),
-        child: Container(
-          height: height,
-          width: double.infinity,
-          decoration: BoxDecoration(
-            image: DecorationImage(
-              image: AssetImage("assets/images/back.jpg"),
-              fit: BoxFit.cover,
-            ),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      width: 2,
-                      color: colorScheme(context).primary,
-                    ),
-                    color: colorScheme(context).primary.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(15),
+              physics: AlwaysScrollableScrollPhysics(),
+              child: Container(
+                height: height,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: AssetImage("assets/images/back.jpg"),
+                    fit: BoxFit.cover,
                   ),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "id : ${widget.bill.id}",
-                          style: textTheme(context).titleMedium?.copyWith(
-                                color: colorScheme(context).onPrimary,
-                                fontWeight: FontWeight.bold,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            width: 2,
+                            color: colorScheme(context).primary,
+                          ),
+                          color: colorScheme(context).primary.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "id : ${widget.bill.id}",
+                                style: textTheme(context).titleMedium?.copyWith(
+                                      color: colorScheme(context).onPrimary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                               ),
-                        ),
-                        const SizedBox(height: 12),
-                        _buildDateField(context),
-                        const SizedBox(height: 12),
-                        _buildCustomerDropdown(customerController),
-                        const SizedBox(height: 12),
-                        _buildProductDropdown(productsTypeController),
-                        const SizedBox(height: 12),
-                        CustomTextFormField(
-                          controller: trnController,
-                          fillColor: Colors.white,
-                          hint: 'TRN',
-                          filled: true,
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Checkbox(
-                              value: isVATChecked,
-                              onChanged: (val) {
-                                final vatProvider = Provider.of<VatProvider>(
-                                  context,
-                                  listen: false,
-                                );
+                              const SizedBox(height: 12),
+                              _buildDateField(context),
+                              const SizedBox(height: 12),
+                              _buildCustomerDropdown(customerController),
+                              const SizedBox(height: 12),
+                              _buildProductDropdown(productsTypeController),
+                              const SizedBox(height: 12),
+                              CustomTextFormField(
+                                controller: trnController,
+                                fillColor: Colors.white,
+                                hint: 'TRN',
+                                filled: true,
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Checkbox(
+                                    value: isVATChecked,
+                                    onChanged: (val) {
+                                      final vatProvider =
+                                          Provider.of<VatProvider>(
+                                        context,
+                                        listen: false,
+                                      );
 
-                                setState(() {
-                                  isVATChecked = val!;
-                                  _calculateAmount();
+                                      setState(() {
+                                        isVATChecked = val!;
+                                        _calculateAmount();
 
-                                  if (isVATChecked) {
-                                    vatController.text =
-                                        "${vatProvider.vatPercentage}";
-                                  } else {
-                                    vatController.clear();
-                                  }
-                                });
-                              },
-                            ),
-                            const Text(
-                              'VAT',
-                              style: TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                            SizedBox(width: 10),
-                          ],
+                                        if (isVATChecked) {
+                                          vatController.text =
+                                              "${vatProvider.vatPercentage}";
+                                        } else {
+                                          vatController.clear();
+                                        }
+                                      });
+                                    },
+                                  ),
+                                  const Text(
+                                    'VAT',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w600),
+                                  ),
+                                  SizedBox(width: 10),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              QuantityRateRow(
+                                quantityController: quantityController,
+                                rateController: rateController,
+                              ),
+                              const SizedBox(height: 16),
+                              AmountFieldWidget(amount: totalAmount),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        QuantityRateRow(
-                          quantityController: quantityController,
-                          rateController: rateController,
-                        ),
-                        const SizedBox(height: 16),
-                        AmountFieldWidget(amount: totalAmount),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(height: 24),
+                      CustomElevatedButton(
+                        onPressed: () async {
+                          if (_formKey.currentState!.validate()) {
+                            final controller = Provider.of<BillController>(
+                              context,
+                              listen: false,
+                            );
+                            final provider = Provider.of<AuthController>(
+                              context,
+                              listen: false,
+                            );
+
+                            final updatedData = {
+                              "date": dateController.text,
+                              "customer_id": "${selectedCustomerId ?? 0}",
+                              "product_id": "${selectedProductId ?? 1}",
+                              "sale_user_id": provider.userId.toString(),
+                              "trn": trnController.text,
+                              "vat": isVATChecked == true
+                                  ? "${Provider.of<VatProvider>(context, listen: false).vatPercentage}%"
+                                  : "0%",
+                              "quantity": quantityController.text,
+                              "rate": rateController.text,
+                              "amount": totalAmount.toStringAsFixed(2),
+                            };
+
+                            await controller.updateBill(
+                              isCredit: widget.bill.isCreditBill,
+                              billId: widget.bill.id ?? 0,
+                              updatedData: updatedData,
+                              token: "${provider.userId}",
+                              context: context,
+                            );
+                          }
+                        },
+                        text: 'Update Bill',
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                CustomElevatedButton(
-                  onPressed: () async {
-                    if (_formKey.currentState!.validate()) {
-                      final controller = Provider.of<BillController>(
-                        context,
-                        listen: false,
-                      );
-                      final provider = Provider.of<AuthController>(
-                        context,
-                        listen: false,
-                      );
-
-                      final updatedData = {
-                        "date": dateController.text,
-                        "customer_id": "${selectedCustomerId ?? 0}",
-                        "product_id": "${selectedProductId ?? 1}",
-                        "sale_user_id": provider.userId.toString(),
-                        "trn": trnController.text,
-                        "vat": isVATChecked == true
-                            ? "${Provider.of<VatProvider>(context, listen: false).vatPercentage}%"
-                            : "0%",
-                        "quantity": quantityController.text,
-                        "rate": rateController.text,
-                        "amount": totalAmount.toStringAsFixed(2),
-                      };
-
-                      await controller.updateBill(
-                        isCredit: widget.bill.isCreditBill,
-                        billId: widget.bill.id ?? 0,
-                        updatedData: updatedData,
-                        token: "${provider.userId}",
-                        context: context,
-                      );
-                    }
-                  },
-                  text: 'Update Bill',
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -431,8 +504,11 @@ class _EditBillScreenState extends State<EditBillScreen> {
           setState(() {
             selectedCustomer = newCustomer;
             selectedCustomerId = newCustomer.id;
-            rateController.text = newCustomer.price == 'N/A' ? '' : newCustomer.price;
-            trnController.text = newCustomer.trnNumber == 'N/A' ? '' : newCustomer.trnNumber;
+            selectedCustomerName = newCustomer.personName;
+            rateController.text =
+                newCustomer.price == 'N/A' ? '' : newCustomer.price;
+            trnController.text =
+                newCustomer.trnNumber == 'N/A' ? '' : newCustomer.trnNumber;
           });
         }
       },
@@ -490,8 +566,9 @@ class _EditBillScreenState extends State<EditBillScreen> {
   }
 
   Widget _buildProductDropdown(ProductsTypeController productsTypeController) {
-    final productNames = productsTypeController.ProductTypeNames.toSet().toList();
-    
+    final productNames =
+        productsTypeController.ProductTypeNames.toSet().toList();
+
     return DropdownButtonFormField<String>(
       validator: (String? value) {
         if (value == null || value.isEmpty) {
@@ -499,9 +576,10 @@ class _EditBillScreenState extends State<EditBillScreen> {
         }
         return null;
       },
-      value: selectedProduct.isNotEmpty && productNames.contains(selectedProduct) 
-          ? selectedProduct 
-          : null,
+      value:
+          selectedProduct.isNotEmpty && productNames.contains(selectedProduct)
+              ? selectedProduct
+              : null,
       style: TextStyle(
         color: Colors.black,
         fontSize: 14,
