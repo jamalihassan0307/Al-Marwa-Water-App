@@ -1,0 +1,69 @@
+{
+  "project_info": {
+    "project_number": "7744689687",
+    "firebase_url": "https://supr-app-default-rtdb.firebaseio.com",
+    "project_id": "supr-app",
+    "storage_bucket": "supr-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:7744689687:android:e5349f63501499940a2e52",
+        "android_client_info": {
+          "package_name": "com.example.al_marwa_water_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "741234659626-qabtti5mn8b2aicqcfgpele68se42slu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAOePPAy-8u97YA9UO3ztKi8aAz2J9CUb0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "741234659626-qabtti5mn8b2aicqcfgpele68se42slu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:7744689687:android:014e0762dfc9eb750a2e52",
+        "android_client_info": {
+          "package_name": "com.example.suprapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "741234659626-qabtti5mn8b2aicqcfgpele68se42slu.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAOePPAy-8u97YA9UO3ztKi8aAz2J9CUb0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "741234659626-qabtti5mn8b2aicqcfgpele68se42slu.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
