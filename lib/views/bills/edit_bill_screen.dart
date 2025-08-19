@@ -35,6 +35,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
   final TextEditingController vatController = TextEditingController();
   final TextEditingController quantityController = TextEditingController();
   final TextEditingController rateController = TextEditingController(text: '0');
+  
   bool isVATChecked = true;
   double totalAmount = 0.0;
   int? selectedProductId;
@@ -44,8 +45,13 @@ class _EditBillScreenState extends State<EditBillScreen> {
   int? selectedCustomerId;
   ProductsTypeController? productsTypeController;
   CustomerData? selectedCustomer;
+  bool _isLoading = true;
+  
   @override
   void initState() {
+    super.initState();
+    
+    // Initialize with bill data
     totalAmount = widget.bill.total;
     dateController.text = widget.bill.date;
     newdateController.text = widget.bill.date;
@@ -55,79 +61,98 @@ class _EditBillScreenState extends State<EditBillScreen> {
     quantityController.text = widget.bill.quantity.toString();
     rateController.text = widget.bill.rate.toString();
     isVATChecked = widget.bill.isVAT;
-    super.initState();
 
+    // Add listeners
+    quantityController.addListener(_calculateAmount);
+    rateController.addListener(_calculateAmount);
+    
+    // Initialize data after widgets are built
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      customerController = Provider.of<CustomerController>(
-        context,
-        listen: false,
-      );
-      productsTypeController = Provider.of<ProductsTypeController>(
-        context,
-        listen: false,
-      );
+      _initializeData();
+    });
+  }
 
-      // ✅ Get product id and price from selectedProduct
-      final selected = productsTypeController!.ProductTypes.firstWhere(
-        (e) => e.name == selectedProduct,
-        orElse: () => ProductsModel(price: '0'),
-      );
-      selectedProductId = selected.id ?? 0;
-      rateController.text = selected.price ?? '0';
+  void _initializeData() async {
+    customerController = Provider.of<CustomerController>(context, listen: false);
+    productsTypeController = Provider.of<ProductsTypeController>(context, listen: false);
+    
+    // Wait for data to load if needed
+    if (customerController!.customers.isEmpty) {
+      await customerController!.fetchCustomers();
+    }
+    
+    if (productsTypeController!.ProductTypes.isEmpty) {
+      await productsTypeController!.fetchProductTypes();
+    }
+    
+    // Find and set the selected customer
+    final customers = customerController!.customers;
+    final customerMatch = customers.firstWhere(
+      (c) => 
+          c.personName == selectedCustomerName ||
+          '${c.customerCode}. ${c.personName}' == selectedCustomerName ||
+          c.customerCode == selectedCustomerName,
+      orElse: () => CustomerData(
+        id: -1,
+        customerCode: '',
+        personName: 'N/A',
+        date: '',
+        customerType: '',
+        buildingName: '',
+        blockNo: '',
+        roomNo: '',
+        phone1: '',
+        phone2: '',
+        deliveryDays: '',
+        customerPayId: '',
+        bottleGiven: '',
+        price: '',
+        paidDeposit: '',
+        amount: '',
+        phone3: '',
+        phone4: '',
+        email: '',
+        tradeName: '',
+        trnNumber: '',
+        authPersonName: '',
+        salePersonId: 0,
+        createdAt: '',
+        updatedAt: '',
+      ),
+    );
 
-      quantityController.addListener(_calculateAmount);
-      rateController.addListener(_calculateAmount);
-      _calculateAmount();
-
-      Future.microtask(() {
-        Provider.of<VatProvider>(context, listen: false).fetchVatPercentage();
+    if (customerMatch.id != -1) {
+      setState(() {
+        selectedCustomer = customerMatch;
+        selectedCustomerId = customerMatch.id;
+        trnController.text = customerMatch.trnNumber == "N/A" || customerMatch.trnNumber.isEmpty
+            ? ''
+            : customerMatch.trnNumber;
       });
+    }
 
-      final customers = customerController!.customers;
-      final match = customers.firstWhere(
-        (c) =>
-            c.personName == selectedCustomerName ||
-            '${c.customerCode}. ${c.personName}' == selectedCustomerName ||
-            c.customerCode == selectedCustomerName,
-        orElse: () => CustomerData(
-          id: -1,
-          customerCode: '',
-          personName: 'N/A',
-          date: '',
-          customerType: '',
-          buildingName: '',
-          blockNo: '',
-          roomNo: '',
-          phone1: '',
-          phone2: '',
-          deliveryDays: '',
-          customerPayId: '',
-          bottleGiven: '',
-          price: '',
-          paidDeposit: '',
-          amount: '',
-          phone3: '',
-          phone4: '',
-          email: '',
-          tradeName: '',
-          trnNumber: '',
-          authPersonName: '',
-          salePersonId: 0,
-          createdAt: '',
-          updatedAt: '',
-        ),
-      );
+    // Find and set the selected product
+    final products = productsTypeController!.ProductTypes;
+    final productMatch = products.firstWhere(
+      (p) => p.name == selectedProduct,
+      orElse: () => ProductsModel(id: 0, name: '', price: '0'),
+    );
 
-      if (match.id != -1) {
-        setState(() {
-          selectedCustomer = match;
-          selectedCustomerId = match.id;
-          trnController.text =
-              match.trnNumber == "N/A" || match.trnNumber.isEmpty
-                  ? ''
-                  : match.trnNumber;
-        });
-      }
+    if (productMatch.id != null && productMatch.id! > 0) {
+      setState(() {
+        selectedProductId = productMatch.id;
+        rateController.text = productMatch.price ?? '0';
+      });
+    }
+
+    // Fetch VAT percentage
+    await Provider.of<VatProvider>(context, listen: false).fetchVatPercentage();
+    
+    // Calculate initial amount
+    _calculateAmount();
+    
+    setState(() {
+      _isLoading = false;
     });
   }
 
@@ -151,7 +176,18 @@ class _EditBillScreenState extends State<EditBillScreen> {
   Widget build(BuildContext context) {
     final height = MediaQuery.of(context).size.height;
     final productsTypeController = Provider.of<ProductsTypeController>(context);
-    print(widget.bill.isCreditBill);
+    final customerController = Provider.of<CustomerController>(context);
+    
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: colorScheme(context).primary,
+          title: Text('Loading...', style: TextStyle(color: Colors.white)),
+        ),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
     return Scaffold(
       appBar: AppBar(
         actions: [
@@ -222,147 +258,9 @@ class _EditBillScreenState extends State<EditBillScreen> {
                         const SizedBox(height: 12),
                         _buildDateField(context),
                         const SizedBox(height: 12),
-                        Consumer<CustomerController>(
-                          builder: (context, customerController, _) {
-                            final allCustomers = customerController.customers;
-
-                            return DropdownSearch<CustomerData>(
-                              validator: (CustomerData? customer) {
-                                if (customer == null) {
-                                  return 'Please select a customer';
-                                }
-                                return null;
-                              },
-                              key: ValueKey(allCustomers.length),
-                              selectedItem: selectedCustomer,
-                              itemAsString: (CustomerData? customer) {
-                                if (customer == null) return '';
-                                return customer.personName == "N/A"
-                                    ? customer.customerCode
-                                    : '${customer.customerCode}. ${customer.buildingName} - ${customer.personName} ${customer.roomNo}- ${customer.blockNo}';
-                              },
-                              asyncItems: (String filter) async {
-                                // ✅ Perform live filtering on all 5 fields
-                                return allCustomers.where((customer) {
-                                  final lowerFilter = filter.toLowerCase();
-
-                                  return customer.customerCode
-                                          .toLowerCase()
-                                          .contains(lowerFilter) ||
-                                      customer.personName
-                                          .toLowerCase()
-                                          .contains(lowerFilter) ||
-                                      customer.buildingName
-                                          .toLowerCase()
-                                          .contains(lowerFilter) ||
-                                      customer.roomNo
-                                          .toLowerCase()
-                                          .contains(lowerFilter) ||
-                                      customer.blockNo
-                                          .toLowerCase()
-                                          .contains(lowerFilter);
-                                }).toList();
-                              },
-                              onChanged: (CustomerData? newCustomer) {
-                                if (newCustomer != null) {
-                                  setState(() {
-                                    selectedCustomer = newCustomer;
-                                    selectedCustomerId = newCustomer.id;
-                                    rateController.text =
-                                        newCustomer.price == 'N/A'
-                                            ? ''
-                                            : newCustomer.price;
-                                    trnController.text =
-                                        newCustomer.trnNumber == 'N/A'
-                                            ? ''
-                                            : newCustomer.trnNumber;
-                                  });
-                                }
-                              },
-                              dropdownDecoratorProps: DropDownDecoratorProps(
-                                dropdownSearchDecoration: InputDecoration(
-                                  hintText: "Select Customer",
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  contentPadding: const EdgeInsets.all(12),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.primary,
-                                      width: 1,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              popupProps: PopupProps.menu(
-                                constraints: BoxConstraints(
-                                  maxHeight: allCustomers.length == 1
-                                      ? 200
-                                      : allCustomers.length <= 5
-                                          ? allCustomers.length *
-                                              60.0 // ≈ height per item
-                                          : 500, // max height
-                                ),
-                                showSearchBox: true,
-                                searchFieldProps: TextFieldProps(
-                                  decoration: InputDecoration(
-                                    hintText: "Type to search...",
-                                    contentPadding: const EdgeInsets.all(12),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                  ),
-                                ),
-                                itemBuilder: (context, item, isSelected) {
-                                  final displayText = item.personName == "N/A"
-                                      ? item.customerCode
-                                      : '${item.customerCode}. ${item.personName}';
-                                  return ListTile(
-                                    title: Text(displayText),
-                                    selected: isSelected,
-                                  );
-                                },
-                              ),
-                            );
-                          },
-                        ),
+                        _buildCustomerDropdown(customerController),
                         const SizedBox(height: 12),
-                        _buildDropdown(
-                          hint: 'Select Product',
-                          value:
-                              productsTypeController.ProductTypeNames.contains(
-                            selectedProduct,
-                          )
-                                  ? selectedProduct
-                                  : null,
-                          items: productsTypeController.ProductTypeNames.toSet()
-                              .toList(), // ✅ ensures unique items
-                          onChanged: (value) {
-                            setState(() {
-                              selectedProduct = value!;
-
-                              final selected = productsTypeController
-                                  .ProductTypes.firstWhere(
-                                (e) => e.name == selectedProduct,
-                                orElse: () => ProductsModel(price: '0'),
-                              );
-
-                              rateController.text = selected.price ?? '0';
-                              selectedProductId = selected.id ?? 0;
-                            });
-                          },
-                        ),
+                        _buildProductDropdown(productsTypeController),
                         const SizedBox(height: 12),
                         CustomTextFormField(
                           controller: trnController,
@@ -390,8 +288,7 @@ class _EditBillScreenState extends State<EditBillScreen> {
                                     vatController.text =
                                         "${vatProvider.vatPercentage}";
                                   } else {
-                                    vatController
-                                        .clear(); // Optional: clear VAT when unchecked
+                                    vatController.clear();
                                   }
                                 });
                               },
@@ -434,28 +331,18 @@ class _EditBillScreenState extends State<EditBillScreen> {
                         "sale_user_id": provider.userId.toString(),
                         "trn": trnController.text,
                         "vat": isVATChecked == true
-                            ? "${vatController.text}%"
+                            ? "${Provider.of<VatProvider>(context, listen: false).vatPercentage}%"
                             : "0%",
                         "quantity": quantityController.text,
                         "rate": rateController.text,
                         "amount": totalAmount.toStringAsFixed(2),
-                        // "date": "2025-04-30",
-                        // "customer_id": "1",
-                        // "product_id": "2",
-                        // "sale_user_id": "1",
-                        // "trn": "TRN123",
-                        // "vat": "5%",
-                        // "quantity": "10",
-                        // "rate": "506",
-                        // "amount": "500",
                       };
 
                       await controller.updateBill(
                         isCredit: widget.bill.isCreditBill,
                         billId: widget.bill.id ?? 0,
                         updatedData: updatedData,
-                        token:
-                            "${provider.userId}", // Replace with actual token
+                        token: "${provider.userId}",
                         context: context,
                       );
                     }
@@ -470,12 +357,99 @@ class _EditBillScreenState extends State<EditBillScreen> {
     );
   }
 
-  Widget _buildDropdown({
-    required String hint,
-    required String? value,
-    required List<String> items,
-    required void Function(String?) onChanged,
-  }) {
+  Widget _buildCustomerDropdown(CustomerController customerController) {
+    final allCustomers = customerController.customers;
+
+    return DropdownSearch<CustomerData>(
+      validator: (CustomerData? customer) {
+        if (customer == null) {
+          return 'Please select a customer';
+        }
+        return null;
+      },
+      selectedItem: selectedCustomer,
+      itemAsString: (CustomerData? customer) {
+        if (customer == null) return '';
+        return customer.personName == "N/A"
+            ? customer.customerCode
+            : '${customer.customerCode}. ${customer.buildingName} - ${customer.personName} ${customer.roomNo}- ${customer.blockNo}';
+      },
+      asyncItems: (String filter) async {
+        return allCustomers.where((customer) {
+          final lowerFilter = filter.toLowerCase();
+          return customer.customerCode.toLowerCase().contains(lowerFilter) ||
+              customer.personName.toLowerCase().contains(lowerFilter) ||
+              customer.buildingName.toLowerCase().contains(lowerFilter) ||
+              customer.roomNo.toLowerCase().contains(lowerFilter) ||
+              customer.blockNo.toLowerCase().contains(lowerFilter);
+        }).toList();
+      },
+      onChanged: (CustomerData? newCustomer) {
+        if (newCustomer != null) {
+          setState(() {
+            selectedCustomer = newCustomer;
+            selectedCustomerId = newCustomer.id;
+            rateController.text = newCustomer.price == 'N/A' ? '' : newCustomer.price;
+            trnController.text = newCustomer.trnNumber == 'N/A' ? '' : newCustomer.trnNumber;
+          });
+        }
+      },
+      dropdownDecoratorProps: DropDownDecoratorProps(
+        dropdownSearchDecoration: InputDecoration(
+          hintText: "Select Customer",
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding: const EdgeInsets.all(12),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: Theme.of(context).colorScheme.primary,
+              width: 2,
+            ),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(
+              color: Theme.of(context).colorScheme.primary,
+              width: 1,
+            ),
+          ),
+        ),
+      ),
+      popupProps: PopupProps.menu(
+        constraints: BoxConstraints(
+          maxHeight: allCustomers.length == 1
+              ? 200
+              : allCustomers.length <= 5
+                  ? allCustomers.length * 60.0
+                  : 500,
+        ),
+        showSearchBox: true,
+        searchFieldProps: TextFieldProps(
+          decoration: InputDecoration(
+            hintText: "Type to search...",
+            contentPadding: const EdgeInsets.all(12),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        ),
+        itemBuilder: (context, item, isSelected) {
+          final displayText = item.personName == "N/A"
+              ? item.customerCode
+              : '${item.customerCode}. ${item.personName}';
+          return ListTile(
+            title: Text(displayText),
+            selected: isSelected,
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildProductDropdown(ProductsTypeController productsTypeController) {
+    final productNames = productsTypeController.ProductTypeNames.toSet().toList();
+    
     return DropdownButtonFormField<String>(
       validator: (String? value) {
         if (value == null || value.isEmpty) {
@@ -483,8 +457,11 @@ class _EditBillScreenState extends State<EditBillScreen> {
         }
         return null;
       },
+      value: selectedProduct.isNotEmpty && productNames.contains(selectedProduct) 
+          ? selectedProduct 
+          : null,
       style: TextStyle(
-        color: Colors.black, // selected item text color
+        color: Colors.black,
         fontSize: 14,
         fontWeight: FontWeight.w500,
       ),
@@ -508,18 +485,29 @@ class _EditBillScreenState extends State<EditBillScreen> {
         ),
       ),
       hint: Text(
-        hint,
+        'Select Product',
         style: TextStyle(
           color: Colors.grey[700],
           fontSize: 14,
           fontWeight: FontWeight.w400,
         ),
       ),
-      value: value,
-      items: items
+      items: productNames
           .map((item) => DropdownMenuItem(value: item, child: Text(item)))
           .toList(),
-      onChanged: onChanged,
+      onChanged: (String? value) {
+        if (value != null) {
+          setState(() {
+            selectedProduct = value;
+            final selected = productsTypeController.ProductTypes.firstWhere(
+              (e) => e.name == selectedProduct,
+              orElse: () => ProductsModel(price: '0'),
+            );
+            rateController.text = selected.price ?? '0';
+            selectedProductId = selected.id ?? 0;
+          });
+        }
+      },
     );
   }
 
